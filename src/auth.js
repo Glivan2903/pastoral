@@ -1,9 +1,35 @@
+const crypto = require('crypto');
 const { db } = require('./db');
 const { sha256 } = require('./util');
 const { guiasDoUsuario } = require('./permissoes');
 
 const COOKIE = 'sid';
 const DIAS_SESSAO = 7;
+
+// Versão de demonstração (Vercel): cada requisição pode cair numa instância diferente, com banco próprio em /tmp.
+// Sessão guardada no banco não sobreviveria; por isso ela vira um cookie assinado que qualquer instância valida
+// (todas nascem com os mesmos usuários). Fora da demonstração continua valendo a sessão no banco.
+const DEMO = !!process.env.VERCEL || process.env.PASTORAL_DEMO === '1';
+const SEGREDO = process.env.SESSION_SECRET || 'pastoral-demo-sessao-publica';
+const assinatura = (payload) => crypto.createHmac('sha256', SEGREDO).update(payload).digest('base64url');
+
+function tokenAssinado(usuarioId) {
+  const payload = Buffer.from(JSON.stringify({ u: usuarioId, e: Date.now() + DIAS_SESSAO * 86400 * 1000 })).toString('base64url');
+  return `${payload}.${assinatura(payload)}`;
+}
+
+function usuarioDoTokenAssinado(token) {
+  const [payload, sig] = String(token).split('.');
+  if (!payload || !sig) return null;
+  const esperado = Buffer.from(assinatura(payload));
+  const recebido = Buffer.from(sig);
+  if (esperado.length !== recebido.length || !crypto.timingSafeEqual(esperado, recebido)) return null;
+  try {
+    const { u, e } = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    if (!(e > Date.now())) return null;
+    return db.prepare('SELECT * FROM usuarios WHERE id = ? AND ativo = 1').get(u) || null;
+  } catch { return null; }
+}
 
 function cookies(req) {
   return Object.fromEntries(
@@ -16,14 +42,17 @@ function cookies(req) {
 }
 
 function criarSessao(res, usuarioId, token) {
-  db.prepare(`INSERT INTO sessoes (token_hash, usuario_id, expira_em) VALUES (?, ?, datetime('now', ?))`).run(
-    sha256(token),
-    usuarioId,
-    `+${DIAS_SESSAO} days`
-  );
+  if (DEMO) token = tokenAssinado(usuarioId);
+  else {
+    db.prepare(`INSERT INTO sessoes (token_hash, usuario_id, expira_em) VALUES (?, ?, datetime('now', ?))`).run(
+      sha256(token),
+      usuarioId,
+      `+${DIAS_SESSAO} days`
+    );
+  }
   res.setHeader(
     'Set-Cookie',
-    `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${DIAS_SESSAO * 86400}`
+    `${COOKIE}=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${DIAS_SESSAO * 86400}${process.env.VERCEL ? '; Secure' : ''}`
   );
 }
 
@@ -35,8 +64,9 @@ function encerrarSessao(req, res) {
 
 function exigirLogin(req, res, next) {
   const t = cookies(req)[COOKIE];
-  const u =
-    t &&
+  const u = DEMO && t
+    ? usuarioDoTokenAssinado(t)
+    : t &&
     db
       .prepare(
         `SELECT u.* FROM sessoes s JOIN usuarios u ON u.id = s.usuario_id
