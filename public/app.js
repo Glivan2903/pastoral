@@ -18,6 +18,13 @@ try { const guardada = JSON.parse(localStorage.getItem('marca')); if (guardada) 
 async function carregarMarca() {
   try { const r = await fetch('/api/marca'); if (r.ok) { const m = await r.json(); aplicarMarca(m); } } catch { /* usa a marca em cache */ }
 }
+function mostrarDemo() {
+  if (!marca.demo || document.getElementById('pill-demo')) return;
+  const p = document.createElement('div');
+  p.id = 'pill-demo'; p.className = 'pill-demo'; p.setAttribute('role', 'note');
+  p.textContent = 'Demonstração · dados temporários';
+  document.body.append(p);
+}
 const logoHtml = () => (marca.logo ? `<img src="${marca.logo}" alt="Logotipo da pastoral">` : LOGO);
 const classeLogo = () => (marca.logo ? 'com-logo' : '');
 const contrasteHex = (a, b) => {
@@ -328,6 +335,7 @@ function telaLogin() {
     <div class="auth-criar" id="criar-conta"><span class="muted">Ainda não tem conta?</span><a class="btn sec bloco" href="#/cadastro">Criar conta</a></div></form>`);
   ativarOlho(document.getElementById('olho'), document.getElementById('senha'));
   api('/api/cadastro/status').then((st) => { if (!st.aberto) document.getElementById('criar-conta')?.remove(); }).catch(() => {}); // visível por padrão; some só se o cadastro estiver fechado
+  if (marca.demo) document.getElementById('criar-conta')?.insertAdjacentHTML('beforebegin', '<div class="dica-demo"><strong>Versão de demonstração</strong><span>Coordenação: <code>maria@pastoral.local</code> / <code>Pastoral2026</code></span><span>Administrador: <code>admin@pastoral.local</code> / <code>Mestre2026</code></span><small>Os dados são temporários e podem ser apagados a qualquer momento.</small></div>');
   document.getElementById('f').onsubmit = async (e) => {
     e.preventDefault();
     const fim = enviando(e.target.querySelector('[type=submit]'), 'Entrando…');
@@ -1363,4 +1371,4 @@ function formLancamento(l, mes, depois) {
   };
 }
 
-carregarMarca().finally(rotear); // cores e logotipo antes de desenhar a primeira tela
+carregarMarca().finally(() => { mostrarDemo(); rotear(); }); // cores e logotipo antes de desenhar a primeira tela

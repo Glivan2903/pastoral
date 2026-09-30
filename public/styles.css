@@ -666,3 +666,10 @@ body {
   .marca strong { font-size: .98rem; }
 }
 @media (min-width: 861px) and (max-height: 860px) { .frase { display: none; } }
+
+/* versão de demonstração (Vercel) */
+.pill-demo { position: fixed; left: 50%; bottom: .6rem; transform: translateX(-50%); z-index: 70; padding: .3rem .9rem; border-radius: 99px; background: rgba(13,24,48,.88); color: #fff; font-size: .75rem; font-weight: 700; letter-spacing: .02em; pointer-events: none; backdrop-filter: blur(6px); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+@media (max-width: 860px) { .pill-demo { bottom: calc(var(--nav-h) + .5rem); } }
+.dica-demo { display: grid; gap: .15rem; margin-top: 1rem; padding: .8rem 1rem; border-radius: 14px; background: var(--ouro-cl); border: 1px dashed var(--ouro); font-size: .85rem; }
+.dica-demo code { font-size: .82rem; background: rgba(255,255,255,.7); padding: .05rem .35rem; border-radius: 6px; }
+.dica-demo small { color: var(--muted); }

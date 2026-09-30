@@ -7,6 +7,7 @@ const { config } = require('../analise');
 const { uploadLogo, caminho } = require('../upload');
 
 const r = express.Router();
+const DEMO = !!process.env.VERCEL || process.env.PASTORAL_DEMO === '1'; // publicado como demonstração (dados temporários)
 const PADRAO = { cor_principal: '#1d3766', cor_secundaria: '#c8962c' };
 const COR = /^#[0-9a-fA-F]{6}$/;
 const salvar = db.prepare(`INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON CONFLICT (chave) DO UPDATE SET valor = excluded.valor, atualizado_em = datetime('now')`);
@@ -17,6 +18,7 @@ function marca() {
     cor_principal: config('marca_cor_principal') || PADRAO.cor_principal,
     cor_secundaria: config('marca_cor_secundaria') || PADRAO.cor_secundaria,
     logo: logo ? `/api/marca/logo?v=${config('marca_versao') || 0}` : null,
+    demo: DEMO,
   };
 }
 const nova_versao = () => salvar.run('marca_versao', String(Date.now()));

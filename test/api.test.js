@@ -10,7 +10,7 @@ process.env.PASTORAL_UPLOADS = path.join(tmp, 'uploads');
 process.env.ADMIN_SENHA = 'Teste12345';
 process.env.PASTORAL_LIMITE_TENTATIVAS = '500';
 
-require('../src/seed'); // migra e cria a coordenadora
+require('../src/seed').semear({ log: () => {} }); // migra e cria a coordenadora e o mestre
 const { criarApp } = require('../src/app');
 
 let base, cookie = '', servidor;
