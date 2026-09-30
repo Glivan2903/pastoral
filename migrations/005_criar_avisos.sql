@@ -1,0 +1,25 @@
+CREATE TABLE avisos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  titulo TEXT NOT NULL,
+  texto TEXT NOT NULL,
+  categoria TEXT NOT NULL DEFAULT 'recado' CHECK (categoria IN ('recado', 'encontro', 'escala', 'evento')),
+  data_evento TEXT,                    -- AAAA-MM-DD, separada da data de publicação
+  fixado INTEGER NOT NULL DEFAULT 0 CHECK (fixado IN (0, 1)),
+  midia TEXT,
+  midia_tipo TEXT CHECK (midia_tipo IN ('imagem', 'video')),
+  autor_id INTEGER REFERENCES usuarios (id),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_avisos_criado ON avisos (criado_em);
+
+CREATE TABLE avisos_leituras (
+  aviso_id INTEGER NOT NULL REFERENCES avisos (id) ON DELETE CASCADE,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+  lido_em TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (aviso_id, usuario_id)
+);
+
+-- @down
+DROP TABLE avisos_leituras;
+DROP TABLE avisos;

@@ -1,0 +1,27 @@
+CREATE TABLE encontros (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,                  -- AAAA-MM-DD
+  tipo TEXT NOT NULL DEFAULT 'reuniao' CHECK (tipo IN ('reuniao', 'missa', 'escala', 'evento')),
+  titulo TEXT,
+  conta_alerta INTEGER NOT NULL DEFAULT 1 CHECK (conta_alerta IN (0, 1)),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (data, tipo)
+);
+CREATE INDEX idx_encontros_data ON encontros (data);
+
+-- Uma situação por membro em cada encontro.
+CREATE TABLE presencas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  encontro_id INTEGER NOT NULL REFERENCES encontros (id) ON DELETE CASCADE,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios (id),
+  situacao TEXT NOT NULL CHECK (situacao IN ('presente', 'ausente', 'justificado')),
+  observacao TEXT,
+  registrado_por INTEGER REFERENCES usuarios (id),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (encontro_id, usuario_id)
+);
+CREATE INDEX idx_presencas_usuario ON presencas (usuario_id);
+
+-- @down
+DROP TABLE presencas;
+DROP TABLE encontros;

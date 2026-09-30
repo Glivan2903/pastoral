@@ -1,0 +1,18 @@
+-- Caixa da pastoral: valores em centavos (inteiro) para não ter erro de arredondamento.
+CREATE TABLE lancamentos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo TEXT NOT NULL CHECK (tipo IN ('entrada', 'saida')),
+  categoria TEXT NOT NULL DEFAULT 'outros' CHECK (categoria IN ('oferta', 'doacao', 'evento', 'compras', 'manutencao', 'materiais', 'outros')),
+  descricao TEXT NOT NULL,
+  valor_centavos INTEGER NOT NULL CHECK (valor_centavos > 0),
+  data TEXT NOT NULL,                  -- AAAA-MM-DD
+  observacao TEXT,
+  criado_por INTEGER REFERENCES usuarios (id),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_lancamentos_data ON lancamentos (data);
+CREATE INDEX idx_lancamentos_tipo ON lancamentos (tipo);
+
+-- @down
+DROP TABLE lancamentos;
