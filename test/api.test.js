@@ -5,16 +5,22 @@ const fs = require('fs');
 const path = require('path');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pastoral-'));
-process.env.PASTORAL_DB = path.join(tmp, 'test.db');
+process.env.PASTORAL_SCHEMA = `teste_${process.pid}`; // schema próprio no Postgres; é apagado no fim
 process.env.PASTORAL_UPLOADS = path.join(tmp, 'uploads');
 process.env.ADMIN_SENHA = 'Teste12345';
+process.env.SUPERADMIN_EMAIL = 'admin@pastoral.local';
+process.env.SUPERADMIN_SENHA = 'Mestre2026';
 process.env.PASTORAL_LIMITE_TENTATIVAS = '500';
 
-require('../src/seed').semear({ log: () => {} }); // migra e cria a coordenadora e o mestre
+const { semear } = require('../src/seed');
+const { db } = require('../src/db');
 const { criarApp } = require('../src/app');
 
 let base, cookie = '', servidor;
-test.before(() => new Promise((ok) => { const s = servidor = criarApp().listen(0, () => { base = `http://127.0.0.1:${s.address().port}`; ok(); }); }));
+test.before(async () => {
+  await semear({ log: () => {} }); // migra e cria a coordenadora e o mestre
+  await new Promise((ok) => { const s = servidor = criarApp().listen(0, () => { base = `http://127.0.0.1:${s.address().port}`; ok(); }); });
+});
 
 async function req(method, url, body, semCookie) {
   const r = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(semCookie ? {} : { cookie }) }, body: body ? JSON.stringify(body) : undefined });
@@ -501,4 +507,4 @@ test('marca: cores e logotipo só o administrador altera; leitura pública; cont
   cookie = coord;
 });
 
-test.after(() => servidor.close());
+test.after(async () => { servidor.close(); await db.apagarSchema(); await db.fechar(); });

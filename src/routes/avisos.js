@@ -7,22 +7,22 @@ const { uploadMidia, tipoMidia, caminho } = require('../upload');
 const { criar: notificar, excluirDe, marcarLidas } = require('../notificacoes');
 
 const r = express.Router(); // montado com exigirLogin
-const naoLidos = (usuarioId) => db.prepare('SELECT COUNT(*) AS n FROM avisos a WHERE NOT EXISTS (SELECT 1 FROM avisos_leituras l WHERE l.aviso_id = a.id AND l.usuario_id = ?)').get(usuarioId).n;
+const naoLidos = async (usuarioId) => (await db.prepare('SELECT COUNT(*) AS n FROM avisos a WHERE NOT EXISTS (SELECT 1 FROM avisos_leituras l WHERE l.aviso_id = a.id AND l.usuario_id = ?)').get(usuarioId)).n;
 const CATEGORIAS = ['recado', 'encontro', 'escala', 'evento'];
 
 const selecao = `SELECT a.*, u.nome AS autor_nome,
-    EXISTS (SELECT 1 FROM avisos_leituras l WHERE l.aviso_id = a.id AND l.usuario_id = ?) AS lido,
+    (EXISTS (SELECT 1 FROM avisos_leituras l WHERE l.aviso_id = a.id AND l.usuario_id = ?))::int AS lido,
     (SELECT COUNT(*) FROM avisos_leituras l WHERE l.aviso_id = a.id) AS leituras
   FROM avisos a LEFT JOIN usuarios u ON u.id = a.autor_id`;
 
-r.get('/', (req, res) => {
-  res.json(db.prepare(`${selecao} ORDER BY a.fixado DESC, a.criado_em DESC, a.id DESC`).all(req.usuario.id));
+r.get('/', async (req, res) => {
+  res.json(await db.prepare(`${selecao} ORDER BY a.fixado DESC, a.criado_em DESC, a.id DESC`).all(req.usuario.id));
 });
 
-r.get('/nao-lidos/total', (req, res) => res.json({ total: naoLidos(req.usuario.id) }));
+r.get('/nao-lidos/total', async (req, res) => res.json({ total: await naoLidos(req.usuario.id) }));
 
-r.get('/:id', (req, res) => {
-  const a = db.prepare(`${selecao} WHERE a.id = ?`).get(req.usuario.id, req.params.id);
+r.get('/:id', async (req, res) => {
+  const a = await db.prepare(`${selecao} WHERE a.id = ?`).get(req.usuario.id, req.params.id);
   if (!a) throw new ErroValidacao('Aviso não encontrado.', 404);
   res.json(a);
 });
@@ -47,27 +47,27 @@ function comUpload(req, res, next) {
   uploadMidia(req, res, (err) => next(err));
 }
 
-r.post('/', exigirCoordenacao, comUpload, (req, res) => {
+r.post('/', exigirCoordenacao, comUpload, async (req, res) => {
   try {
     const c = campos(req.body);
-    const info = db
+    const info = await db
       .prepare(
         `INSERT INTO avisos (titulo, texto, categoria, data_evento, fixado, midia, midia_tipo, autor_id)
          VALUES (@titulo, @texto, @categoria, @data_evento, @fixado, @midia, @midia_tipo, @autor)`
       )
       .run({ ...c, midia: req.file?.filename ?? null, midia_tipo: req.file ? tipoMidia(req.file.mimetype) : null, autor: req.usuario.id });
-    auditar(req, 'criar', 'aviso', info.lastInsertRowid);
-    notificar({ tipo: 'aviso', referenciaId: info.lastInsertRowid, titulo: `Novo aviso: ${c.titulo}`, mensagem: c.texto.replace(/\s+/g, ' ').slice(0, 110), link: `#/avisos/${info.lastInsertRowid}`, porId: req.usuario.id });
-    res.status(201).json(db.prepare(`${selecao} WHERE a.id = ?`).get(req.usuario.id, info.lastInsertRowid));
+    await auditar(req, 'criar', 'aviso', info.lastInsertRowid);
+    await notificar({ tipo: 'aviso', referenciaId: info.lastInsertRowid, titulo: `Novo aviso: ${c.titulo}`, mensagem: c.texto.replace(/\s+/g, ' ').slice(0, 110), link: `#/avisos/${info.lastInsertRowid}`, porId: req.usuario.id });
+    res.status(201).json(await db.prepare(`${selecao} WHERE a.id = ?`).get(req.usuario.id, info.lastInsertRowid));
   } catch (e) {
     if (req.file) fs.rm(req.file.path, { force: true }, () => {});
     throw e;
   }
 });
 
-r.put('/:id', exigirCoordenacao, comUpload, (req, res) => {
+r.put('/:id', exigirCoordenacao, comUpload, async (req, res) => {
   try {
-    const atual = db.prepare('SELECT * FROM avisos WHERE id = ?').get(req.params.id);
+    const atual = await db.prepare('SELECT * FROM avisos WHERE id = ?').get(req.params.id);
     if (!atual) throw new ErroValidacao('Aviso não encontrado.', 404);
     const c = campos(req.body);
     let { midia, midia_tipo } = atual;
@@ -76,49 +76,49 @@ r.put('/:id', exigirCoordenacao, comUpload, (req, res) => {
       midia = req.file ? req.file.filename : null;
       midia_tipo = req.file ? tipoMidia(req.file.mimetype) : null;
     }
-    db.prepare(
+    await db.prepare(
       `UPDATE avisos SET titulo = @titulo, texto = @texto, categoria = @categoria, data_evento = @data_evento, fixado = @fixado,
          midia = @midia, midia_tipo = @midia_tipo, atualizado_em = datetime('now') WHERE id = @id`
     ).run({ ...c, midia, midia_tipo, id: atual.id });
-    auditar(req, 'editar', 'aviso', atual.id);
-    res.json(db.prepare(`${selecao} WHERE a.id = ?`).get(req.usuario.id, atual.id));
+    await auditar(req, 'editar', 'aviso', atual.id);
+    res.json(await db.prepare(`${selecao} WHERE a.id = ?`).get(req.usuario.id, atual.id));
   } catch (e) {
     if (req.file) fs.rm(req.file.path, { force: true }, () => {});
     throw e;
   }
 });
 
-r.delete('/:id', exigirCoordenacao, (req, res) => {
-  const a = db.prepare('SELECT * FROM avisos WHERE id = ?').get(req.params.id);
+r.delete('/:id', exigirCoordenacao, async (req, res) => {
+  const a = await db.prepare('SELECT * FROM avisos WHERE id = ?').get(req.params.id);
   if (!a) throw new ErroValidacao('Aviso não encontrado.', 404);
-  db.prepare('DELETE FROM avisos WHERE id = ?').run(a.id);
-  excluirDe(['aviso'], a.id);
+  await db.prepare('DELETE FROM avisos WHERE id = ?').run(a.id);
+  await excluirDe(['aviso'], a.id);
   if (a.midia) fs.rm(caminho(a.midia), { force: true }, () => {});
-  auditar(req, 'excluir', 'aviso', a.id, { titulo: a.titulo });
+  await auditar(req, 'excluir', 'aviso', a.id, { titulo: a.titulo });
   res.json({ ok: true });
 });
 
 // Flag de leitura da própria pessoa: lido = true marca como lido, false volta para "não lido".
-r.put('/:id/lido', (req, res) => {
+r.put('/:id/lido', async (req, res) => {
   if (typeof req.body.lido !== 'boolean') throw new ErroValidacao('Informe lido como verdadeiro ou falso.');
-  if (!db.prepare('SELECT 1 FROM avisos WHERE id = ?').get(req.params.id)) throw new ErroValidacao('Aviso não encontrado.', 404);
+  if (!(await db.prepare('SELECT 1 FROM avisos WHERE id = ?').get(req.params.id))) throw new ErroValidacao('Aviso não encontrado.', 404);
   if (req.body.lido) {
-    db.prepare('INSERT OR IGNORE INTO avisos_leituras (aviso_id, usuario_id) VALUES (?, ?)').run(req.params.id, req.usuario.id);
-    marcarLidas(req.usuario.id, ['aviso'], Number(req.params.id)); // leu o aviso, a notificação dele também sai do sino
+    await db.prepare('INSERT OR IGNORE INTO avisos_leituras (aviso_id, usuario_id) VALUES (?, ?)').run(req.params.id, req.usuario.id);
+    await marcarLidas(req.usuario.id, ['aviso'], Number(req.params.id)); // leu o aviso, a notificação dele também sai do sino
   }
-  else db.prepare('DELETE FROM avisos_leituras WHERE aviso_id = ? AND usuario_id = ?').run(req.params.id, req.usuario.id);
-  res.json({ ok: true, lido: req.body.lido, nao_lidos: naoLidos(req.usuario.id) });
+  else await db.prepare('DELETE FROM avisos_leituras WHERE aviso_id = ? AND usuario_id = ?').run(req.params.id, req.usuario.id);
+  res.json({ ok: true, lido: req.body.lido, nao_lidos: await naoLidos(req.usuario.id) });
 });
 
-r.post('/marcar-todos-lidos', (req, res) => {
-  db.prepare('INSERT OR IGNORE INTO avisos_leituras (aviso_id, usuario_id) SELECT id, ? FROM avisos').run(req.usuario.id);
-  marcarLidas(req.usuario.id, ['aviso']);
+r.post('/marcar-todos-lidos', async (req, res) => {
+  await db.prepare('INSERT OR IGNORE INTO avisos_leituras (aviso_id, usuario_id) SELECT id, ?::int FROM avisos').run(req.usuario.id);
+  await marcarLidas(req.usuario.id, ['aviso']);
   res.json({ ok: true, nao_lidos: 0 });
 });
 
-r.get('/:id/leituras', exigirCoordenacao, (req, res) => {
+r.get('/:id/leituras', exigirCoordenacao, async (req, res) => {
   res.json(
-    db
+    await db
       .prepare(
         `SELECT u.id, u.nome, l.lido_em FROM usuarios u
          LEFT JOIN avisos_leituras l ON l.usuario_id = u.id AND l.aviso_id = ?

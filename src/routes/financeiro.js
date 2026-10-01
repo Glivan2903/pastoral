@@ -13,8 +13,8 @@ function mesParam(v) {
   return m;
 }
 
-function somar(where, params) {
-  const linhas = db.prepare(`SELECT tipo, COALESCE(SUM(valor_centavos), 0) AS total FROM lancamentos ${where} GROUP BY tipo`).all(...params);
+async function somar(where, params) {
+  const linhas = await db.prepare(`SELECT tipo, COALESCE(SUM(valor_centavos), 0) AS total FROM lancamentos ${where} GROUP BY tipo`).all(...params);
   const entradas = linhas.find((l) => l.tipo === 'entrada')?.total ?? 0;
   const saidas = linhas.find((l) => l.tipo === 'saida')?.total ?? 0;
   return { entradas, saidas, saldo: entradas - saidas };
@@ -34,7 +34,7 @@ function campos(b) {
   };
 }
 
-r.get('/', (req, res) => {
+r.get('/', async (req, res) => {
   const mes = mesParam(req.query.mes);
   const filtros = ['substr(data, 1, 7) = ?'];
   const params = [mes];
@@ -42,7 +42,7 @@ r.get('/', (req, res) => {
   if (CATEGORIAS.includes(req.query.categoria)) { filtros.push('categoria = ?'); params.push(req.query.categoria); }
   if (req.query.q) { filtros.push('descricao LIKE ?'); params.push(`%${req.query.q}%`); }
 
-  const lancamentos = db.prepare(`SELECT * FROM lancamentos WHERE ${filtros.join(' AND ')} ORDER BY data DESC, id DESC`).all(...params);
+  const lancamentos = await db.prepare(`SELECT * FROM lancamentos WHERE ${filtros.join(' AND ')} ORDER BY data DESC, id DESC`).all(...params);
 
   // série dos 6 meses que terminam no mês escolhido
   const [a, m] = mes.split('-').map(Number);
@@ -51,7 +51,7 @@ r.get('/', (req, res) => {
     const d = new Date(Date.UTC(a, m - 1 - i, 1));
     meses.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
   }
-  const linhas = db
+  const linhas = await db
     .prepare(`SELECT substr(data, 1, 7) AS mes, tipo, SUM(valor_centavos) AS total FROM lancamentos WHERE substr(data, 1, 7) BETWEEN ? AND ? GROUP BY 1, 2`)
     .all(meses[0], meses[5]);
   const serie = meses.map((x) => ({
@@ -60,15 +60,15 @@ r.get('/', (req, res) => {
     saidas: linhas.find((l) => l.mes === x && l.tipo === 'saida')?.total ?? 0,
   }));
 
-  const porCategoria = db
+  const porCategoria = (await db
     .prepare(`SELECT categoria, tipo, SUM(valor_centavos) AS total FROM lancamentos WHERE substr(data, 1, 7) = ? GROUP BY categoria, tipo ORDER BY total DESC`)
-    .all(mes)
+    .all(mes))
     .map((c) => ({ ...c, rotulo: ROTULOS[c.categoria] }));
 
   res.json({
     mes,
-    resumo: somar('WHERE substr(data, 1, 7) = ?', [mes]),
-    saldo_caixa: somar('', []).saldo,
+    resumo: await somar('WHERE substr(data, 1, 7) = ?', [mes]),
+    saldo_caixa: (await somar('', [])).saldo,
     serie,
     por_categoria: porCategoria,
     categorias: ROTULOS,
@@ -76,39 +76,39 @@ r.get('/', (req, res) => {
   });
 });
 
-r.post('/', (req, res) => {
+r.post('/', async (req, res) => {
   const c = campos(req.body);
-  const info = db
+  const info = await db
     .prepare(`INSERT INTO lancamentos (tipo, categoria, descricao, valor_centavos, data, observacao, criado_por) VALUES (@tipo, @categoria, @descricao, @valor_centavos, @data, @observacao, @por)`)
     .run({ ...c, por: req.usuario.id });
-  auditar(req, 'criar', 'lancamento', info.lastInsertRowid, { tipo: c.tipo, valor_centavos: c.valor_centavos });
-  res.status(201).json(db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(info.lastInsertRowid));
+  await auditar(req, 'criar', 'lancamento', info.lastInsertRowid, { tipo: c.tipo, valor_centavos: c.valor_centavos });
+  res.status(201).json(await db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(info.lastInsertRowid));
 });
 
-r.put('/:id', (req, res) => {
-  const atual = db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(req.params.id);
+r.put('/:id', async (req, res) => {
+  const atual = await db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(req.params.id);
   if (!atual) throw new ErroValidacao('Lançamento não encontrado.', 404);
   const c = campos(req.body);
-  db.prepare(
+  await db.prepare(
     `UPDATE lancamentos SET tipo = @tipo, categoria = @categoria, descricao = @descricao, valor_centavos = @valor_centavos,
        data = @data, observacao = @observacao, atualizado_em = datetime('now') WHERE id = @id`
   ).run({ ...c, id: atual.id });
-  auditar(req, 'editar', 'lancamento', atual.id, { antes: atual.valor_centavos, depois: c.valor_centavos });
-  res.json(db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(atual.id));
+  await auditar(req, 'editar', 'lancamento', atual.id, { antes: atual.valor_centavos, depois: c.valor_centavos });
+  res.json(await db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(atual.id));
 });
 
-r.delete('/:id', (req, res) => {
-  const l = db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(req.params.id);
+r.delete('/:id', async (req, res) => {
+  const l = await db.prepare('SELECT * FROM lancamentos WHERE id = ?').get(req.params.id);
   if (!l) throw new ErroValidacao('Lançamento não encontrado.', 404);
-  db.prepare('DELETE FROM lancamentos WHERE id = ?').run(l.id);
-  auditar(req, 'excluir', 'lancamento', l.id, { descricao: l.descricao, valor_centavos: l.valor_centavos });
+  await db.prepare('DELETE FROM lancamentos WHERE id = ?').run(l.id);
+  await auditar(req, 'excluir', 'lancamento', l.id, { descricao: l.descricao, valor_centavos: l.valor_centavos });
   res.json({ ok: true });
 });
 
-r.get('/relatorio.csv', (req, res) => {
+r.get('/relatorio.csv', async (req, res) => {
   const mes = mesParam(req.query.mes);
   const linhas = [['Data', 'Tipo', 'Categoria', 'Descrição', 'Valor (R$)', 'Observação']];
-  for (const l of db.prepare('SELECT * FROM lancamentos WHERE substr(data, 1, 7) = ? ORDER BY data, id').all(mes)) {
+  for (const l of await db.prepare('SELECT * FROM lancamentos WHERE substr(data, 1, 7) = ? ORDER BY data, id').all(mes)) {
     linhas.push([l.data.split('-').reverse().join('/'), l.tipo === 'entrada' ? 'Entrada' : 'Saída', ROTULOS[l.categoria], l.descricao,
       ((l.tipo === 'saida' ? -1 : 1) * l.valor_centavos / 100).toFixed(2).replace('.', ','), l.observacao || '']);
   }

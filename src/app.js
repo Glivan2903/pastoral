@@ -8,6 +8,7 @@ function criarApp() {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '100kb' }));
+  app.use((req, res, next) => { req.body ??= {}; next(); }); // corpo ausente ou de outro tipo vira {} (e não derruba a rota)
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -36,8 +37,10 @@ function criarApp() {
     if (err instanceof ErroValidacao) return res.status(err.status).json({ erro: err.message });
     if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ erro: 'Arquivo grande demais.' });
     if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') return res.status(400).json({ erro: 'Envie no máximo 20 fotos por vez.' });
+    if (err.type === 'entity.too.large') return res.status(413).json({ erro: 'Requisição grande demais.' });
     if (err.type === 'entity.parse.failed') return res.status(400).json({ erro: 'Requisição inválida.' });
-    if (/UNIQUE constraint failed/.test(err.message || '')) return res.status(409).json({ erro: 'Registro duplicado.' });
+    if (err.code === '23505') return res.status(409).json({ erro: 'Registro duplicado.' });
+    if (err.code === '22P02' || err.code === '22003') return res.status(404).json({ erro: 'Registro não encontrado.' });
     if (err.status === 404 || err.code === 'ENOENT') return res.status(404).json({ erro: 'Arquivo não encontrado.' });
     console.error(err);
     res.status(500).json({ erro: 'Erro interno. Tente novamente.' });

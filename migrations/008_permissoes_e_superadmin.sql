@@ -7,7 +7,7 @@ CREATE TABLE usuario_guias (
   guia TEXT NOT NULL CHECK (guia IN ('frequencia', 'aniversariantes', 'avisos', 'membros', 'financeiro')),
   liberado INTEGER NOT NULL CHECK (liberado IN (0, 1)),
   atualizado_por INTEGER REFERENCES usuarios (id),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  atualizado_em TEXT NOT NULL DEFAULT agora(),
   PRIMARY KEY (usuario_id, guia)
 );
 

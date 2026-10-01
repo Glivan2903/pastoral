@@ -6,10 +6,9 @@ const { guiasDoUsuario } = require('./permissoes');
 const COOKIE = 'sid';
 const DIAS_SESSAO = 7;
 
-// Versão de demonstração (Vercel): cada requisição pode cair numa instância diferente, com banco próprio em /tmp.
-// Sessão guardada no banco não sobreviveria; por isso ela vira um cookie assinado que qualquer instância valida
-// (todas nascem com os mesmos usuários). Fora da demonstração continua valendo a sessão no banco.
-const DEMO = !!process.env.VERCEL || process.env.PASTORAL_DEMO === '1';
+// Modo demonstração (PASTORAL_DEMO=1): a sessão vira um cookie assinado em vez de ficar no banco.
+// Com o banco compartilhado do Supabase, a sessão no banco funciona em qualquer instância e é o padrão.
+const DEMO = process.env.PASTORAL_DEMO === '1';
 const SEGREDO = process.env.SESSION_SECRET || 'pastoral-demo-sessao-publica';
 const assinatura = (payload) => crypto.createHmac('sha256', SEGREDO).update(payload).digest('base64url');
 
@@ -18,7 +17,7 @@ function tokenAssinado(usuarioId) {
   return `${payload}.${assinatura(payload)}`;
 }
 
-function usuarioDoTokenAssinado(token) {
+async function usuarioDoTokenAssinado(token) {
   const [payload, sig] = String(token).split('.');
   if (!payload || !sig) return null;
   const esperado = Buffer.from(assinatura(payload));
@@ -27,7 +26,7 @@ function usuarioDoTokenAssinado(token) {
   try {
     const { u, e } = JSON.parse(Buffer.from(payload, 'base64url').toString());
     if (!(e > Date.now())) return null;
-    return db.prepare('SELECT * FROM usuarios WHERE id = ? AND ativo = 1').get(u) || null;
+    return (await db.prepare('SELECT * FROM usuarios WHERE id = ? AND ativo = 1').get(u)) || null;
   } catch { return null; }
 }
 
@@ -41,10 +40,10 @@ function cookies(req) {
   );
 }
 
-function criarSessao(res, usuarioId, token) {
+async function criarSessao(res, usuarioId, token) {
   if (DEMO) token = tokenAssinado(usuarioId);
   else {
-    db.prepare(`INSERT INTO sessoes (token_hash, usuario_id, expira_em) VALUES (?, ?, datetime('now', ?))`).run(
+    await db.prepare(`INSERT INTO sessoes (token_hash, usuario_id, expira_em) VALUES (?, ?, datetime('now', ?))`).run(
       sha256(token),
       usuarioId,
       `+${DIAS_SESSAO} days`
@@ -56,18 +55,18 @@ function criarSessao(res, usuarioId, token) {
   );
 }
 
-function encerrarSessao(req, res) {
+async function encerrarSessao(req, res) {
   const t = cookies(req)[COOKIE];
-  if (t) db.prepare('DELETE FROM sessoes WHERE token_hash = ?').run(sha256(t));
+  if (t) await db.prepare('DELETE FROM sessoes WHERE token_hash = ?').run(sha256(t));
   res.setHeader('Set-Cookie', `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
-function exigirLogin(req, res, next) {
+async function exigirLogin(req, res, next) {
   const t = cookies(req)[COOKIE];
   const u = DEMO && t
-    ? usuarioDoTokenAssinado(t)
+    ? await usuarioDoTokenAssinado(t)
     : t &&
-    db
+    await db
       .prepare(
         `SELECT u.* FROM sessoes s JOIN usuarios u ON u.id = s.usuario_id
          WHERE s.token_hash = ? AND s.expira_em > datetime('now') AND u.ativo = 1`
@@ -75,7 +74,7 @@ function exigirLogin(req, res, next) {
       .get(sha256(t));
   if (!u) return res.status(401).json({ erro: 'Sessão expirada. Entre novamente.' });
   req.usuario = u;
-  req.guias = guiasDoUsuario(u);
+  req.guias = await guiasDoUsuario(u);
   next();
 }
 
@@ -94,13 +93,13 @@ function exigirSuperadmin(req, res, next) {
 }
 
 // Libera a rota só para quem tem a guia (padrão da função + exceções do usuário mestre).
-const exigirGuia = (guia) => (req, res, next) => {
+const exigirGuia = (guia) => async (req, res, next) => {
   if (!req.guias.includes(guia)) return res.status(403).json({ erro: 'Você não tem acesso a esta guia.' });
   next();
 };
 
-function auditar(req, acao, entidade, entidadeId, detalhes) {
-  db.prepare('INSERT INTO auditoria (usuario_id, acao, entidade, entidade_id, detalhes) VALUES (?, ?, ?, ?, ?)').run(
+async function auditar(req, acao, entidade, entidadeId, detalhes) {
+  await db.prepare('INSERT INTO auditoria (usuario_id, acao, entidade, entidade_id, detalhes) VALUES (?, ?, ?, ?, ?)').run(
     req.usuario ? req.usuario.id : null,
     acao,
     entidade,
@@ -109,8 +108,8 @@ function auditar(req, acao, entidade, entidadeId, detalhes) {
   );
 }
 
-function usuarioPublico(u) {
-  const guias = guiasDoUsuario(u);
+async function usuarioPublico(u) {
+  const guias = await guiasDoUsuario(u);
   return {
     id: u.id,
     nome: u.nome,
@@ -122,7 +121,7 @@ function usuarioPublico(u) {
     superadmin: u.superadmin === 1,
     guias,
     avisos_nao_lidos: guias.includes('avisos')
-      ? db.prepare('SELECT COUNT(*) AS n FROM avisos a WHERE NOT EXISTS (SELECT 1 FROM avisos_leituras l WHERE l.aviso_id = a.id AND l.usuario_id = ?)').get(u.id).n
+      ? (await db.prepare('SELECT COUNT(*) AS n FROM avisos a WHERE NOT EXISTS (SELECT 1 FROM avisos_leituras l WHERE l.aviso_id = a.id AND l.usuario_id = ?)').get(u.id)).n
       : 0,
   };
 }

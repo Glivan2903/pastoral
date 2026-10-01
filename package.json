@@ -15,10 +15,10 @@
   },
   "description": "Sistema da Pastoral do Acolhimento – Santuário do Bugio",
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
     "express": "^5.2.1",
     "gsap": "^3.15.0",
-    "multer": "^2.4.0"
+    "multer": "^2.4.0",
+    "pg": "^8.23.1"
   },
   "private": true,
   "engines": {

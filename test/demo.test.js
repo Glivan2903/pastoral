@@ -1,5 +1,5 @@
-// Reproduz a versão de demonstração na Vercel: cada requisição pode cair numa instância diferente,
-// cada uma com seu próprio banco. A sessão precisa valer em qualquer instância.
+// Modo demonstração (PASTORAL_DEMO=1): a sessão é um cookie assinado e precisa valer em qualquer instância.
+// As duas instâncias dividem um schema temporário do Postgres.
 const test = require('node:test');
 const assert = require('node:assert');
 const { spawn } = require('child_process');
@@ -10,22 +10,30 @@ const path = require('path');
 const raiz = path.join(__dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pastoral-demo-'));
 const filhos = [];
+const SCHEMA = `demo_${process.pid}`;
 
 function subirInstancia(nome, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const f = spawn(process.execPath, ['-e', `
       const http = require('http');
-      require('./src/seed').semear({ demo: 'completo', log: () => {} });
-      const s = http.createServer(require('./src/app').criarApp()).listen(0, () => console.log('PORTA=' + s.address().port));
-    `], { cwd: raiz, env: { ...process.env, PASTORAL_DEMO: '1', PASTORAL_DB: path.join(tmp, `${nome}.db`), PASTORAL_UPLOADS: path.join(tmp, nome), PASTORAL_LIMITE_TENTATIVAS: '500', ...extraEnv } });
+      require('./src/seed').semear({ demo: 'completo', log: () => {} }).then(() => {
+        const s = http.createServer(require('./src/app').criarApp()).listen(0, () => console.log('PORTA=' + s.address().port));
+      });
+    `], { cwd: raiz, env: { ...process.env, PASTORAL_DEMO: '1', PASTORAL_SCHEMA: SCHEMA, ADMIN_SENHA: 'Pastoral2026', SUPERADMIN_EMAIL: 'admin@pastoral.local', SUPERADMIN_SENHA: 'Mestre2026', PASTORAL_UPLOADS: path.join(tmp, nome), PASTORAL_LIMITE_TENTATIVAS: '500', ...extraEnv } });
     filhos.push(f);
     f.stdout.on('data', (d) => { const m = /PORTA=(\d+)/.exec(String(d)); if (m) resolve(`http://127.0.0.1:${m[1]}`); });
     f.on('error', reject);
-    setTimeout(() => reject(new Error('instância não subiu')), 20000);
+    setTimeout(() => reject(new Error('instância não subiu')), 60000);
   });
 }
 
-test.after(() => filhos.forEach((f) => f.kill()));
+test.after(async () => {
+  filhos.forEach((f) => f.kill());
+  process.env.PASTORAL_SCHEMA = SCHEMA;
+  const { db } = require('../src/db');
+  await db.apagarSchema();
+  await db.fechar();
+});
 
 test('demo: sessão criada numa instância vale em outra (bancos separados)', async () => {
   const A = await subirInstancia('a');

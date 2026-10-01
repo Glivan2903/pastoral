@@ -19,12 +19,12 @@ const PADRAO = {
   membro: ['painel', 'minha-presenca', 'avisos', 'galeria', 'configuracoes'], // Usuário comum: só o básico
 };
 
-const excecoes = (usuarioId) =>
-  new Map(db.prepare('SELECT guia, liberado FROM usuario_guias WHERE usuario_id = ?').all(usuarioId).map((r) => [r.guia, r.liberado === 1]));
+const excecoes = async (usuarioId) =>
+  new Map((await db.prepare('SELECT guia, liberado FROM usuario_guias WHERE usuario_id = ?').all(usuarioId)).map((r) => [r.guia, r.liberado === 1]));
 
-function guiasDoUsuario(u) {
+async function guiasDoUsuario(u) {
   if (u.superadmin) return GUIAS.map((g) => g.id);
-  const ex = excecoes(u.id);
+  const ex = await excecoes(u.id);
   const padrao = PADRAO[u.funcao] || PADRAO.membro;
   return GUIAS.filter((g) => !g.soAdmin).filter((g) => g.fixa || (ex.has(g.id) ? ex.get(g.id) : padrao.includes(g.id))).map((g) => g.id);
 }

@@ -145,7 +145,16 @@ const ROTAS = [
 ];
 const GRUPOS = [['Geral', ['painel', 'minha-presenca', 'avisos', 'galeria', 'aniversariantes']], ['Gestão', ['frequencia', 'membros', 'financeiro']], ['Administração', ['usuarios']], ['Conta', ['configuracoes']]];
 
+// Navegações rápidas (ou rede lenta) não podem se atropelar: uma tela antiga que termina depois da nova a sobrescreveria.
+// Enquanto uma renderização está em curso, a navegação mais recente fica na fila e roda quando ela acaba.
+let roteando = false, rotearDeNovo = false;
 async function rotear() {
+  if (roteando) { rotearDeNovo = true; return; }
+  roteando = true;
+  try { do { rotearDeNovo = false; await rotearUma(); } while (rotearDeNovo); } finally { roteando = false; }
+}
+
+async function rotearUma() {
   if (estado.previa) { aplicarMarca(marca, false); estado.previa = false; } // prévia de cores não salva não fica para as outras telas
   const partes = location.hash.replace(/^#\/?/, '').split('/');
   const [id, sub, extra] = partes;

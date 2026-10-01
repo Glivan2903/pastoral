@@ -1,7 +1,7 @@
 CREATE TABLE configuracoes (
   chave TEXT PRIMARY KEY,
   valor TEXT NOT NULL,
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  atualizado_em TEXT NOT NULL DEFAULT agora()
 );
 
 INSERT INTO configuracoes (chave, valor) VALUES

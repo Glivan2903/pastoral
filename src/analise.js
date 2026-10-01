@@ -1,15 +1,15 @@
 const { db } = require('./db');
 
-function config(chave) {
-  return db.prepare('SELECT valor FROM configuracoes WHERE chave = ?').get(chave)?.valor;
+async function config(chave) {
+  return (await db.prepare('SELECT valor FROM configuracoes WHERE chave = ?').get(chave))?.valor;
 }
 
 // Resumo de frequência por membro ativo. "Justificado" não conta como falta nem quebra a sequência.
-function analisar(de = '0000-01-01', ate = '9999-12-31') {
-  const limite = Number(config('limite_faltas')) || 3;
-  const criterio = config('criterio_alerta') || 'acumuladas';
-  const membros = db.prepare('SELECT id, nome, telefone FROM usuarios WHERE ativo = 1 AND superadmin = 0 ORDER BY nome COLLATE NOCASE').all();
-  const linhas = db
+async function analisar(de = '0000-01-01', ate = '9999-12-31') {
+  const limite = Number(await config('limite_faltas')) || 3;
+  const criterio = (await config('criterio_alerta')) || 'acumuladas';
+  const membros = await db.prepare('SELECT id, nome, telefone FROM usuarios WHERE ativo = 1 AND superadmin = 0 ORDER BY nome COLLATE NOCASE').all();
+  const linhas = await db
     .prepare(
       `SELECT p.usuario_id, p.situacao, e.conta_alerta
        FROM presencas p JOIN encontros e ON e.id = p.encontro_id

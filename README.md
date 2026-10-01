@@ -1,22 +1,27 @@
 # Pastoral do Acolhimento – Santuário do Bugio
 
 Painel web da coordenação: frequência, avisos, aniversariantes e cadastro de membros.
-Node 20+, Express e SQLite local (`data/pastoral.db`), sem serviços externos.
+Node 20+, Express e Postgres (Supabase). As fotos e o logotipo ficam em disco (`data/uploads`).
 
 ## Como rodar
+
+Crie um arquivo `.env` (ignorado pelo git) com a connection string do Supabase, em *Project Settings → Database → Connection string*. A conexão direta (`db.<ref>.supabase.co`) só tem IPv6; se a sua rede não tiver, use o **Session pooler** (porta 5432). Caracteres especiais na senha precisam ser codificados na URL (`@` vira `%40`, `#` vira `%23`):
+
+```
+DATABASE_URL=postgresql://postgres.<ref>:<senha>@aws-0-<regiao>.pooler.supabase.com:5432/postgres
+```
 
 ```bash
 npm install
 npm run migrate      # cria/atualiza o banco (o `npm start` também migra sozinho)
-npm run seed         # cria a coordenadora (maria@pastoral.local / Pastoral2026)
-                     # e o usuário mestre (admin@pastoral.local / Mestre2026)
+npm run seed         # cria o usuário mestre com SUPERADMIN_EMAIL / SUPERADMIN_SENHA (do .env)
 npm run seed:demo    # opcional: 6 membros de exemplo
 npm start            # http://localhost:3000
-npm test             # API (node:test)
+npm test             # API (node:test); usa um schema temporário no mesmo banco e o apaga no fim
 npm run e2e          # ponta a ponta no Chrome (usa o Google Chrome instalado)
 ```
 
-`ADMIN_EMAIL`/`ADMIN_SENHA` (coordenação) e `SUPERADMIN_EMAIL`/`SUPERADMIN_SENHA` (mestre) mudam os logins criados pelo seed. Troque as senhas em Configurações.
+`SUPERADMIN_EMAIL`/`SUPERADMIN_SENHA` definem o login do administrador criado pelo seed. `ADMIN_EMAIL`/`ADMIN_SENHA` criam, opcionalmente, uma coordenadora de exemplo (usado nos testes). Troque as senhas em Configurações.
 
 ## Cadastro, cargos e permissões
 

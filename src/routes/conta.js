@@ -26,23 +26,23 @@ function limitarLogin(req, res, next) {
   next();
 }
 
-r.post('/login', limitarLogin, (req, res) => {
+r.post('/login', limitarLogin, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
-  const u = db.prepare('SELECT * FROM usuarios WHERE email = ? AND ativo = 1').get(email);
+  const u = await db.prepare('SELECT * FROM usuarios WHERE email = ? AND ativo = 1').get(email);
   if (!u || !conferirSenha(String(req.body.senha || ''), u.senha_hash)) {
     return res.status(401).json({ erro: 'E-mail ou senha incorretos.' });
   }
-  criarSessao(res, u.id, novoToken());
+  await criarSessao(res, u.id, novoToken());
   req.usuario = u;
-  auditar(req, 'login', 'usuario', u.id);
-  res.json(usuarioPublico(u));
+  await auditar(req, 'login', 'usuario', u.id);
+  res.json(await usuarioPublico(u));
 });
 
-r.get('/cadastro/status', (req, res) => res.json({ aberto: config('cadastro_aberto') !== '0' }));
+r.get('/cadastro/status', async (req, res) => res.json({ aberto: (await config('cadastro_aberto')) !== '0' }));
 
 // Autocadastro: sempre entra como Usuário (cargo "membro", guias padrão). A administração ajusta depois.
-r.post('/cadastro', limitarLogin, (req, res) => {
-  if (config('cadastro_aberto') === '0') throw new ErroValidacao('O cadastro está fechado no momento. Fale com a administração.', 403);
+r.post('/cadastro', limitarLogin, async (req, res) => {
+  if ((await config('cadastro_aberto')) === '0') throw new ErroValidacao('O cadastro está fechado no momento. Fale com a administração.', 403);
   const b = req.body;
   if (b.site) throw new ErroValidacao('Não foi possível concluir o cadastro.'); // campo-isca: só robô preenche
   const nome = normalizarNome(b.nome);
@@ -51,79 +51,79 @@ r.post('/cadastro', limitarLogin, (req, res) => {
   validarSenha(b.senha);
   if (b.senha !== b.confirmacao) throw new ErroValidacao('A confirmação não confere com a senha.');
   if (!b.consentimento) throw new ErroValidacao('Aceite o uso dos seus dados (LGPD) para criar a conta.');
-  if (db.prepare('SELECT 1 FROM usuarios WHERE email = ?').get(email)) throw new ErroValidacao('Este e-mail já está cadastrado. Entre ou recupere a senha.', 409);
-  const info = db
+  if (await db.prepare('SELECT 1 FROM usuarios WHERE email = ?').get(email)) throw new ErroValidacao('Este e-mail já está cadastrado. Entre ou recupere a senha.', 409);
+  const info = await db
     .prepare(`INSERT INTO usuarios (nome, telefone, data_nascimento, email, funcao, senha_hash, consentimento_lgpd_em) VALUES (?, ?, ?, ?, 'membro', ?, datetime('now'))`)
     .run(nome, normalizarTelefone(b.telefone), normalizarData(b.data_nascimento, 'Data de nascimento'), email, hashSenha(b.senha));
-  const u = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(info.lastInsertRowid);
-  criarSessao(res, u.id, novoToken());
+  const u = await db.prepare('SELECT * FROM usuarios WHERE id = ?').get(info.lastInsertRowid);
+  await criarSessao(res, u.id, novoToken());
   req.usuario = u;
-  auditar(req, 'cadastro', 'usuario', u.id);
-  res.status(201).json(usuarioPublico(u));
+  await auditar(req, 'cadastro', 'usuario', u.id);
+  res.status(201).json(await usuarioPublico(u));
 });
 
-r.post('/logout', (req, res) => {
-  encerrarSessao(req, res);
+r.post('/logout', async (req, res) => {
+  await encerrarSessao(req, res);
   res.json({ ok: true });
 });
 
 // Sem serviço de e-mail local: o link de redefinição é impresso no console do servidor.
-r.post('/recuperar-senha', limitarLogin, (req, res) => {
+r.post('/recuperar-senha', limitarLogin, async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
-  const u = db.prepare('SELECT id FROM usuarios WHERE email = ? AND ativo = 1').get(email);
+  const u = await db.prepare('SELECT id FROM usuarios WHERE email = ? AND ativo = 1').get(email);
   if (u) {
     const token = novoToken();
-    db.prepare(`INSERT INTO redefinicoes_senha (token_hash, usuario_id, expira_em) VALUES (?, ?, datetime('now', '+1 hour'))`).run(sha256(token), u.id);
+    await db.prepare(`INSERT INTO redefinicoes_senha (token_hash, usuario_id, expira_em) VALUES (?, ?, datetime('now', '+1 hour'))`).run(sha256(token), u.id);
     console.log(`[recuperar-senha] ${email}: http://localhost:${process.env.PORT || 3000}/#/redefinir/${token}`);
   }
   res.json({ ok: true, mensagem: 'Se o e-mail estiver cadastrado, enviamos as instruções de redefinição.' });
 });
 
-r.post('/redefinir-senha', (req, res) => {
+r.post('/redefinir-senha', async (req, res) => {
   validarSenha(req.body.senha);
-  const reg = db
+  const reg = await db
     .prepare(`SELECT * FROM redefinicoes_senha WHERE token_hash = ? AND usado_em IS NULL AND expira_em > datetime('now')`)
     .get(sha256(String(req.body.token || '')));
   if (!reg) throw new ErroValidacao('Link inválido ou expirado.');
-  db.transaction(() => {
-    db.prepare(`UPDATE usuarios SET senha_hash = ?, atualizado_em = datetime('now') WHERE id = ?`).run(hashSenha(req.body.senha), reg.usuario_id);
-    db.prepare(`UPDATE redefinicoes_senha SET usado_em = datetime('now') WHERE token_hash = ?`).run(reg.token_hash);
-    db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(reg.usuario_id);
+  await db.transaction(async () => {
+    await db.prepare(`UPDATE usuarios SET senha_hash = ?, atualizado_em = datetime('now') WHERE id = ?`).run(hashSenha(req.body.senha), reg.usuario_id);
+    await db.prepare(`UPDATE redefinicoes_senha SET usado_em = datetime('now') WHERE token_hash = ?`).run(reg.token_hash);
+    await db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(reg.usuario_id);
   })();
   res.json({ ok: true });
 });
 
-r.get('/me', exigirLogin, (req, res) => res.json(usuarioPublico(req.usuario)));
+r.get('/me', exigirLogin, async (req, res) => res.json(await usuarioPublico(req.usuario)));
 
-r.put('/me', exigirLogin, (req, res) => {
+r.put('/me', exigirLogin, async (req, res) => {
   const b = req.body;
   const email = normalizarEmail(b.email);
   if (!email) throw new ErroValidacao('Informe o e-mail.');
-  const outro = db.prepare('SELECT id FROM usuarios WHERE email = ? AND id <> ?').get(email, req.usuario.id);
+  const outro = await db.prepare('SELECT id FROM usuarios WHERE email = ? AND id <> ?').get(email, req.usuario.id);
   if (outro) throw new ErroValidacao('Este e-mail já está em uso.');
-  db.prepare(
+  await db.prepare(
     `UPDATE usuarios SET nome = ?, telefone = ?, data_nascimento = ?, email = ?, atualizado_em = datetime('now') WHERE id = ?`
   ).run(normalizarNome(b.nome), normalizarTelefone(b.telefone), normalizarData(b.data_nascimento, 'Data de nascimento'), email, req.usuario.id);
-  auditar(req, 'atualizar_perfil', 'usuario', req.usuario.id);
-  res.json(usuarioPublico(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(req.usuario.id)));
+  await auditar(req, 'atualizar_perfil', 'usuario', req.usuario.id);
+  res.json(await usuarioPublico(await db.prepare('SELECT * FROM usuarios WHERE id = ?').get(req.usuario.id)));
 });
 
-r.put('/me/senha', exigirLogin, (req, res) => {
+r.put('/me/senha', exigirLogin, async (req, res) => {
   const { senha_atual, nova_senha, confirmacao } = req.body;
   if (!conferirSenha(String(senha_atual || ''), req.usuario.senha_hash)) throw new ErroValidacao('A senha atual está incorreta.');
   if (nova_senha !== confirmacao) throw new ErroValidacao('A confirmação não confere com a nova senha.');
   validarSenha(nova_senha);
-  db.prepare(`UPDATE usuarios SET senha_hash = ?, atualizado_em = datetime('now') WHERE id = ?`).run(hashSenha(nova_senha), req.usuario.id);
-  auditar(req, 'alterar_senha', 'usuario', req.usuario.id);
+  await db.prepare(`UPDATE usuarios SET senha_hash = ?, atualizado_em = datetime('now') WHERE id = ?`).run(hashSenha(nova_senha), req.usuario.id);
+  await auditar(req, 'alterar_senha', 'usuario', req.usuario.id);
   res.json({ ok: true });
 });
 
-r.post('/me/foto', exigirLogin, (req, res, next) => {
-  uploadFoto(req, res, (err) => {
+r.post('/me/foto', exigirLogin, async (req, res, next) => {
+  uploadFoto(req, res, async (err) => {
     if (err) return next(err);
     if (!req.file) return next(new ErroValidacao('Envie uma imagem.'));
     if (req.usuario.foto) fs.rm(caminho(req.usuario.foto), { force: true }, () => {});
-    db.prepare(`UPDATE usuarios SET foto = ?, atualizado_em = datetime('now') WHERE id = ?`).run(req.file.filename, req.usuario.id);
+    await db.prepare(`UPDATE usuarios SET foto = ?, atualizado_em = datetime('now') WHERE id = ?`).run(req.file.filename, req.usuario.id);
     res.json({ foto: req.file.filename });
   });
 });

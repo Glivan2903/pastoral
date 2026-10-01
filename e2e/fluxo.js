@@ -10,7 +10,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pastoral-e2e-'));
 const SHOTS = process.env.SHOTS || path.join(tmp, 'telas');
 fs.mkdirSync(SHOTS, { recursive: true });
 const PORT = 3400 + Math.floor(Math.random() * 400);
-const env = { ...process.env, PORT, PASTORAL_DB: path.join(tmp, 'e2e.db'), PASTORAL_UPLOADS: path.join(tmp, 'up'), ADMIN_SENHA: 'Pastoral2026', PASTORAL_LIMITE_TENTATIVAS: '1000' };
+const env = { ...process.env, PORT, PASTORAL_SCHEMA: `e2e_${process.pid}`, SUPERADMIN_EMAIL: 'admin@pastoral.local', SUPERADMIN_SENHA: 'Mestre2026', PASTORAL_UPLOADS: path.join(tmp, 'up'), ADMIN_SENHA: 'Pastoral2026', PASTORAL_LIMITE_TENTATIVAS: '1000' };
 const URL = `http://127.0.0.1:${PORT}`;
 const passos = [];
 const ok = (m) => { passos.push(m); console.log('  ✔', m); };
@@ -18,7 +18,7 @@ const ok = (m) => { passos.push(m); console.log('  ✔', m); };
 (async () => {
   execFileSync('node', ['src/seed.js', '--demo'], { env, stdio: 'ignore' });
   const srv = spawn('node', ['src/server.js'], { env, stdio: 'ignore' });
-  await new Promise((r) => setTimeout(r, 1500));
+  for (let i = 0; i < 60; i++) { if (await fetch(URL + '/api/marca').then((r) => r.ok, () => false)) break; await new Promise((r) => setTimeout(r, 500)); }
   const png = path.join(tmp, 'foto.png');
   fs.writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
 
@@ -31,7 +31,7 @@ const ok = (m) => { passos.push(m); console.log('  ✔', m); };
   page.on('response', (r) => { if (r.status() === 404) console.log('    404:', r.url()); });
   page.on('dialog', (d) => d.accept());
   const shot = (n) => page.screenshot({ path: path.join(SHOTS, `${n}.png`), fullPage: true });
-  const toast = async (txt) => page.locator('#toast div', { hasText: txt }).first().waitFor({ timeout: 5000 });
+  const toast = async (txt) => page.locator('#toast div', { hasText: txt }).first().waitFor({ timeout: 20000 });
   const nav = (id) => page.locator(`.menu nav a[data-rota="${id}"]`).click();
 
   try {
@@ -168,6 +168,7 @@ const ok = (m) => { passos.push(m); console.log('  ✔', m); };
     await shot('06-avisos');
 
     // modal: abrir conta como leitura; a flag volta para "não lido" e de novo para "lido"
+    await page.waitForSelector('.aviso-resumo.nao-lido'); // a lista chega depois da navegação (rede lenta)
     assert.strictEqual(await page.locator('.aviso-resumo.nao-lido').count(), 1);
     await page.click('.aviso-resumo .abrir');
     await page.waitForSelector('.aviso-modal');
@@ -176,6 +177,7 @@ const ok = (m) => { passos.push(m); console.log('  ✔', m); };
     await page.click('#m-flag');
     await page.waitForFunction(() => document.getElementById('m-flag').getAttribute('aria-pressed') === 'false');
     await page.click('#m-x');
+    await page.waitForSelector('.aviso-resumo.nao-lido');
     assert.strictEqual(await page.locator('.aviso-resumo.nao-lido').count(), 1);
     await page.click('.aviso-resumo [data-flag]');
     await page.waitForFunction(() => document.querySelectorAll('.aviso-resumo.nao-lido').length === 0);
@@ -655,5 +657,6 @@ const ok = (m) => { passos.push(m); console.log('  ✔', m); };
   } finally {
     await browser.close();
     srv.kill();
+    execFileSync('node', ['-e', "const { db } = require('./src/db'); db.apagarSchema().then(() => db.fechar())"], { env, stdio: 'ignore' }); // apaga o schema temporário
   }
 })();
