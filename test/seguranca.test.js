@@ -6,6 +6,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 
+process.env.PASTORAL_STORAGE = 'local'; // estes testes usam o disco; o Storage tem teste próprio (storage.test.js)
 process.env.PASTORAL_SCHEMA = `seg_${process.pid}`;
 process.env.PASTORAL_UPLOADS = fs.mkdtempSync(path.join(os.tmpdir(), 'pastoral-seg-'));
 process.env.ADMIN_SENHA = 'Teste12345';

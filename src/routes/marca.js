@@ -1,10 +1,10 @@
 const express = require('express');
-const fs = require('fs');
 const { db } = require('../db');
 const { exigirLogin, exigirSuperadmin, auditar } = require('../auth');
 const { ErroValidacao, contraste } = require('../util');
 const { config } = require('../analise');
-const { uploadLogo, caminho } = require('../upload');
+const { uploadLogo } = require('../upload');
+const { remover, servir } = require('../armazenamento');
 
 const r = express.Router();
 const DEMO = process.env.PASTORAL_DEMO === '1'; // publicado como demonstração
@@ -22,7 +22,7 @@ async function marca() {
   };
 }
 const nova_versao = () => salvar.run('marca_versao', String(Date.now()));
-const apagarLogo = async () => { const f = await config('marca_logo'); if (f) fs.rm(caminho(f), { force: true }, () => {}); await salvar.run('marca_logo', ''); };
+const apagarLogo = async () => { const f = await config('marca_logo'); if (f) await remover(f); await salvar.run('marca_logo', ''); };
 
 // Público: a tela de login precisa das cores e do logotipo antes de qualquer sessão.
 r.get('/', async (req, res) => res.json({ ...(await marca()), padrao: PADRAO }));
@@ -31,7 +31,7 @@ r.get('/logo', async (req, res) => {
   const f = await config('marca_logo');
   if (!f) return res.status(404).json({ erro: 'Sem logotipo.' });
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // a URL muda (?v=) quando o logotipo muda
-  res.sendFile(caminho(f));
+  await servir(res, f);
 });
 
 r.put('/cores', exigirLogin, exigirSuperadmin, async (req, res) => {

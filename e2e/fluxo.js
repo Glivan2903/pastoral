@@ -10,7 +10,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pastoral-e2e-'));
 const SHOTS = process.env.SHOTS || path.join(tmp, 'telas');
 fs.mkdirSync(SHOTS, { recursive: true });
 const PORT = 3400 + Math.floor(Math.random() * 400);
-const env = { ...process.env, PORT, PASTORAL_SCHEMA: `e2e_${process.pid}`, SUPERADMIN_EMAIL: 'admin@pastoral.local', SUPERADMIN_SENHA: 'Mestre2026', PASTORAL_UPLOADS: path.join(tmp, 'up'), ADMIN_SENHA: 'Pastoral2026', PASTORAL_LIMITE_TENTATIVAS: '1000' };
+const env = { ...process.env, PASTORAL_STORAGE: 'local', PORT, PASTORAL_SCHEMA: `e2e_${process.pid}`, SUPERADMIN_EMAIL: 'admin@pastoral.local', SUPERADMIN_SENHA: 'Mestre2026', PASTORAL_UPLOADS: path.join(tmp, 'up'), ADMIN_SENHA: 'Pastoral2026', PASTORAL_LIMITE_TENTATIVAS: '1000' };
 const URL = `http://127.0.0.1:${PORT}`;
 const passos = [];
 const ok = (m) => { passos.push(m); console.log('  ✔', m); };

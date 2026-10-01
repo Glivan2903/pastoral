@@ -22,10 +22,19 @@ const pool = new Pool({
   max: Number(process.env.PG_POOL_MAX) || (process.env.VERCEL ? 2 : 5),
 });
 pool.on('error', (e) => console.error('[pg]', e.message));
-if (SCHEMA) pool.on('connect', (c) => c.query(`SET search_path TO "${SCHEMA}", public`));
+
+// Em testes (PASTORAL_SCHEMA) cada conexão aponta para o schema temporário antes da primeira consulta.
+async function preparaCliente(c) {
+  if (SCHEMA && !c.__schema) { await c.query(`SET search_path TO "${SCHEMA}", public`); c.__schema = true; }
+  return c;
+}
+const consultaNoPool = async (text, valores) => {
+  const c = await preparaCliente(await pool.connect());
+  try { return await c.query(text, valores); } finally { c.release(); }
+};
 
 const als = new AsyncLocalStorage();
-const exec = () => als.getStore() || pool;
+const exec = () => als.getStore() || (SCHEMA ? { query: consultaNoPool } : pool);
 
 const COM_ID = /^\s*INSERT\s+(?:OR\s+IGNORE\s+)?INTO\s+(usuarios|encontros|presencas|avisos|auditoria|lancamentos|eventos|fotos|notificacoes)\b/i;
 const cache = new Map();
@@ -80,7 +89,7 @@ const db = {
   // Devolve uma função assíncrona; chamadas de db dentro dela usam a mesma conexão (e o mesmo BEGIN/COMMIT).
   transaction: (fn) => async (...args) => {
     if (als.getStore()) return fn(...args); // já está numa transação
-    const client = await pool.connect();
+    const client = await preparaCliente(await pool.connect());
     try {
       await client.query('BEGIN');
       const r = await als.run(client, () => fn(...args));

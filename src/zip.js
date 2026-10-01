@@ -1,6 +1,4 @@
 // ZIP "store" (sem compressão; JPG/PNG/WebP já são comprimidos), escrito em streaming para não segurar tudo na memória.
-const fs = require('fs');
-
 const TABELA = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
@@ -20,13 +18,13 @@ function dosDataHora(d = new Date()) {
   };
 }
 
-// arquivos: [{ nome, caminho }]; saida: stream gravável (res).
-function escreverZip(saida, arquivos) {
+// arquivos: [{ nome, ler: () => Promise<Buffer> }]; saida: stream gravável (res).
+async function escreverZip(saida, arquivos) {
   const { hora, data } = dosDataHora();
   const central = [];
   let deslocamento = 0;
   for (const a of arquivos) {
-    const dados = fs.readFileSync(a.caminho);
+    const dados = await a.ler();
     const nome = Buffer.from(a.nome, 'utf8');
     const crc = crc32(dados);
     const local = Buffer.alloc(30);

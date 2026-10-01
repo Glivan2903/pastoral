@@ -1,9 +1,9 @@
 const express = require('express');
-const fs = require('fs');
 const { db } = require('../db');
 const { exigirCoordenacao, auditar } = require('../auth');
 const { ErroValidacao, normalizarData } = require('../util');
-const { uploadMidia, tipoMidia, caminho } = require('../upload');
+const { uploadMidia, tipoMidia } = require('../upload');
+const { remover } = require('../armazenamento');
 const { criar: notificar, excluirDe, marcarLidas } = require('../notificacoes');
 
 const r = express.Router(); // montado com exigirLogin
@@ -60,7 +60,7 @@ r.post('/', exigirCoordenacao, comUpload, async (req, res) => {
     await notificar({ tipo: 'aviso', referenciaId: info.lastInsertRowid, titulo: `Novo aviso: ${c.titulo}`, mensagem: c.texto.replace(/\s+/g, ' ').slice(0, 110), link: `#/avisos/${info.lastInsertRowid}`, porId: req.usuario.id });
     res.status(201).json(await db.prepare(`${selecao} WHERE a.id = ?`).get(req.usuario.id, info.lastInsertRowid));
   } catch (e) {
-    if (req.file) fs.rm(req.file.path, { force: true }, () => {});
+    if (req.file) await remover(req.file.filename);
     throw e;
   }
 });
@@ -72,7 +72,7 @@ r.put('/:id', exigirCoordenacao, comUpload, async (req, res) => {
     const c = campos(req.body);
     let { midia, midia_tipo } = atual;
     if (req.file || req.body.remover_midia === 'true') {
-      if (midia) fs.rm(caminho(midia), { force: true }, () => {});
+      if (midia) await remover(midia);
       midia = req.file ? req.file.filename : null;
       midia_tipo = req.file ? tipoMidia(req.file.mimetype) : null;
     }
@@ -83,7 +83,7 @@ r.put('/:id', exigirCoordenacao, comUpload, async (req, res) => {
     await auditar(req, 'editar', 'aviso', atual.id);
     res.json(await db.prepare(`${selecao} WHERE a.id = ?`).get(req.usuario.id, atual.id));
   } catch (e) {
-    if (req.file) fs.rm(req.file.path, { force: true }, () => {});
+    if (req.file) await remover(req.file.filename);
     throw e;
   }
 });
@@ -93,7 +93,7 @@ r.delete('/:id', exigirCoordenacao, async (req, res) => {
   if (!a) throw new ErroValidacao('Aviso não encontrado.', 404);
   await db.prepare('DELETE FROM avisos WHERE id = ?').run(a.id);
   await excluirDe(['aviso'], a.id);
-  if (a.midia) fs.rm(caminho(a.midia), { force: true }, () => {});
+  if (a.midia) await remover(a.midia);
   await auditar(req, 'excluir', 'aviso', a.id, { titulo: a.titulo });
   res.json({ ok: true });
 });

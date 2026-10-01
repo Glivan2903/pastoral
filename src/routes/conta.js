@@ -1,5 +1,4 @@
 const express = require('express');
-const fs = require('fs');
 const { db } = require('../db');
 const {
   criarSessao, encerrarSessao, exigirLogin, auditar, usuarioPublico,
@@ -8,7 +7,8 @@ const {
   ErroValidacao, normalizarNome, normalizarTelefone, normalizarData, normalizarEmail,
   validarSenha, hashSenha, conferirSenha, sha256, novoToken, hojeISO,
 } = require('../util');
-const { uploadFoto, caminho } = require('../upload');
+const { uploadFoto } = require('../upload');
+const { remover } = require('../armazenamento');
 const { config } = require('../analise');
 
 const r = express.Router();
@@ -125,7 +125,7 @@ r.post('/me/foto', exigirLogin, async (req, res, next) => {
   uploadFoto(req, res, async (err) => {
     if (err) return next(err);
     if (!req.file) return next(new ErroValidacao('Envie uma imagem.'));
-    if (req.usuario.foto) fs.rm(caminho(req.usuario.foto), { force: true }, () => {});
+    if (req.usuario.foto) await remover(req.usuario.foto);
     await db.prepare(`UPDATE usuarios SET foto = ?, atualizado_em = datetime('now') WHERE id = ?`).run(req.file.filename, req.usuario.id);
     res.json({ foto: req.file.filename });
   });

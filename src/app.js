@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const { exigirLogin, exigirGuia } = require('./auth');
 const { ErroValidacao } = require('./util');
-const { caminho } = require('./upload');
+const { servir } = require('./armazenamento');
 
 function criarApp() {
   const app = express();
@@ -27,7 +27,7 @@ function criarApp() {
   app.use('/api', exigirLogin, require('./routes/geral'));
 
   // Mídias só para quem está logado.
-  app.get('/uploads/:arquivo', exigirLogin, (req, res) => res.sendFile(caminho(req.params.arquivo)));
+  app.get('/uploads/:arquivo', exigirLogin, async (req, res) => { await servir(res, req.params.arquivo); });
 
   app.use('/api', (req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
   app.use(express.static(path.join(__dirname, '..', 'public')));

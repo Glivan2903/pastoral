@@ -1,12 +1,11 @@
 const express = require('express');
-const fs = require('fs');
 const { db } = require('../db');
 const { auditar, usuarioPublico, nivelCoordenacao } = require('../auth');
 const {
   ErroValidacao, normalizarNome, normalizarTelefone, normalizarData, normalizarEmail,
   validarSenha, hashSenha,
 } = require('../util');
-const { caminho } = require('../upload');
+const { remover } = require('../armazenamento');
 
 const r = express.Router(); // montado com exigirLogin + exigirGuia('membros')
 
@@ -104,7 +103,7 @@ r.post('/:id/reativar', alterarAtivo(1));
 r.post('/:id/anonimizar', async (req, res) => {
   const u = await alvo(req, req.params.id);
   if (u.id === req.usuario.id) throw new ErroValidacao('Você não pode anonimizar a si mesma(o).');
-  if (u.foto) fs.rm(caminho(u.foto), { force: true }, () => {});
+  if (u.foto) await remover(u.foto);
   await db.transaction(async () => {
     await db.prepare(
       `UPDATE usuarios SET nome = 'Membro removido', telefone = NULL, data_nascimento = NULL, email = NULL, foto = NULL,

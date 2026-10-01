@@ -10,6 +10,7 @@ const path = require('path');
 const raiz = path.join(__dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pastoral-demo-'));
 const filhos = [];
+process.env.PASTORAL_STORAGE = 'local'; // estes testes usam o disco; o Storage tem teste próprio (storage.test.js)
 const SCHEMA = `demo_${process.pid}`;
 
 function subirInstancia(nome, extraEnv = {}) {

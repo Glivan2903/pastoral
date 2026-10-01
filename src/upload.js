@@ -1,7 +1,6 @@
-const path = require('path');
 const multer = require('multer');
-const { UPLOAD_DIR } = require('./db');
 const { novoToken, ErroValidacao } = require('./util');
+const { motor } = require('./armazenamento');
 
 const TIPOS = {
   'image/jpeg': '.jpg',
@@ -12,10 +11,8 @@ const TIPOS = {
   'video/quicktime': '.mov',
 };
 
-const storage = multer.diskStorage({
-  destination: UPLOAD_DIR,
-  filename: (req, file, cb) => cb(null, novoToken().slice(0, 24) + TIPOS[file.mimetype]),
-});
+// Nome aleatório (o nome enviado pelo usuário nunca é usado); o destino é o Supabase Storage ou o disco local.
+const storage = motor((file) => novoToken().slice(0, 24) + TIPOS[file.mimetype]);
 
 const fileFilter = (req, file, cb) =>
   TIPOS[file.mimetype] ? cb(null, true) : cb(new ErroValidacao('Formato não aceito. Envie JPG, PNG, WebP, MP4, WebM ou MOV.'));
@@ -42,6 +39,5 @@ const uploadLogo = multer({
 }).single('arquivo');
 
 const tipoMidia = (mimetype) => (mimetype.startsWith('video/') ? 'video' : 'imagem');
-const caminho = (arquivo) => path.join(UPLOAD_DIR, path.basename(arquivo));
 
-module.exports = { uploadMidia, uploadFoto, uploadFotos, uploadLogo, tipoMidia, caminho };
+module.exports = { uploadMidia, uploadFoto, uploadFotos, uploadLogo, tipoMidia };

@@ -1,10 +1,10 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const { db } = require('../db');
 const { exigirCoordenacao, auditar } = require('../auth');
 const { ErroValidacao, normalizarData } = require('../util');
-const { uploadFotos, caminho } = require('../upload');
+const { uploadFotos } = require('../upload');
+const { remover, servir, ler } = require('../armazenamento');
 const { escreverZip } = require('../zip');
 const { criar: notificar, excluirDe, notificarFotos, marcarLidas } = require('../notificacoes');
 
@@ -13,7 +13,7 @@ const r = express.Router(); // montado com exigirLogin + exigirGuia('galeria'); 
 const slug = (t) =>
   String(t || 'foto').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 60) || 'foto';
 
-const apagarArquivo = (f) => f && fs.rm(caminho(f), { force: true }, () => {});
+const apagarArquivo = (f) => remover(f);
 
 async function evento(id) {
   const e = await db.prepare('SELECT * FROM eventos WHERE id = ?').get(id);
@@ -72,7 +72,7 @@ r.delete('/:id', exigirCoordenacao, async (req, res) => {
   const arquivos = await db.prepare('SELECT arquivo FROM fotos WHERE evento_id = ?').all(e.id);
   await db.prepare('DELETE FROM eventos WHERE id = ?').run(e.id); // fotos saem em cascata
   await excluirDe(['evento', 'fotos'], e.id);
-  arquivos.forEach((f) => apagarArquivo(f.arquivo));
+  await Promise.all(arquivos.map((f) => apagarArquivo(f.arquivo)));
   await auditar(req, 'excluir', 'evento', e.id, { titulo: e.titulo, fotos: arquivos.length });
   res.json({ ok: true });
 });
@@ -81,8 +81,8 @@ r.delete('/:id', exigirCoordenacao, async (req, res) => {
 r.post('/:id/fotos', exigirCoordenacao, async (req, res, next) => {
   uploadFotos(req, res, async (err) => {
     const arquivos = req.files || [];
-    const limpar = () => arquivos.forEach((f) => fs.rm(f.path, { force: true }, () => {}));
-    if (err) { limpar(); return next(err); }
+    const limpar = () => Promise.all(arquivos.map((f) => remover(f.filename)));
+    if (err) { await limpar(); return next(err); }
     try {
       const e = await evento(req.params.id);
       if (!arquivos.length) throw new ErroValidacao('Escolha ao menos uma foto.');
@@ -98,7 +98,7 @@ r.post('/:id/fotos', exigirCoordenacao, async (req, res, next) => {
       await auditar(req, 'adicionar_fotos', 'evento', e.id, { quantidade: arquivos.length });
       await notificarFotos(e, arquivos.length, (await db.prepare('SELECT COUNT(*) AS n FROM fotos WHERE evento_id = ?').get(e.id)).n, req.usuario.id);
       res.status(201).json({ ok: true, adicionadas: arquivos.length });
-    } catch (e) { limpar(); next(e); }
+    } catch (e) { await limpar(); next(e); }
   });
 });
 
@@ -124,14 +124,14 @@ r.delete('/fotos/:fotoId', exigirCoordenacao, async (req, res) => {
   const f = await foto(req.params.fotoId);
   await db.prepare('UPDATE eventos SET capa_foto_id = NULL WHERE capa_foto_id = ?').run(f.id);
   await db.prepare('DELETE FROM fotos WHERE id = ?').run(f.id);
-  apagarArquivo(f.arquivo);
+  await apagarArquivo(f.arquivo);
   await auditar(req, 'excluir', 'foto', f.id, { evento_id: f.evento_id });
   res.json({ ok: true });
 });
 
 r.get('/fotos/:fotoId/download', async (req, res) => {
   const f = await foto(req.params.fotoId);
-  res.download(caminho(f.arquivo), `${slug(f.titulo)}${path.extname(f.arquivo)}`);
+  await servir(res, f.arquivo, `${slug(f.titulo)}${path.extname(f.arquivo)}`);
 });
 
 r.get('/:id/download', async (req, res) => {
@@ -140,7 +140,9 @@ r.get('/:id/download', async (req, res) => {
   if (!fotos.length) throw new ErroValidacao('Este evento ainda não tem fotos.');
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${slug(e.titulo)}.zip"`);
-  escreverZip(res, fotos.map((f, i) => ({ nome: `${String(i + 1).padStart(2, '0')}-${slug(f.titulo)}${path.extname(f.arquivo)}`, caminho: caminho(f.arquivo) })));
+  try {
+    await escreverZip(res, fotos.map((f, i) => ({ nome: `${String(i + 1).padStart(2, '0')}-${slug(f.titulo)}${path.extname(f.arquivo)}`, ler: () => ler(f.arquivo) })));
+  } catch (e) { if (res.headersSent) return res.destroy(e); throw e; }
 });
 
 module.exports = r;

@@ -1,7 +1,7 @@
 # Pastoral do Acolhimento – Santuário do Bugio
 
 Painel web da coordenação: frequência, avisos, aniversariantes e cadastro de membros.
-Node 20+, Express e Postgres (Supabase). As fotos e o logotipo ficam em disco (`data/uploads`).
+Node 20+, Express e Postgres (Supabase). Fotos, logotipo e mídias dos avisos ficam no Supabase Storage (bucket privado); sem chave configurada, caem no disco (`data/uploads`).
 
 ## Como rodar
 
@@ -9,7 +9,12 @@ Crie um arquivo `.env` (ignorado pelo git) com a connection string do Supabase, 
 
 ```
 DATABASE_URL=postgresql://postgres.<ref>:<senha>@aws-0-<regiao>.pooler.supabase.com:5432/postgres
+SUPABASE_URL=https://<ref>.supabase.co
+SUPABASE_SERVICE_KEY=<service_role / secret key>   # só no servidor, nunca no front
+SUPABASE_BUCKET=pastoral-midia                      # criado sozinho, privado
 ```
+
+Com `SUPABASE_SERVICE_KEY` o servidor guarda as imagens no bucket e as entrega só para quem está logado (`/uploads/...`). `PASTORAL_STORAGE=local` força o disco.
 
 ```bash
 npm install

@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pastoral-'));
+process.env.PASTORAL_STORAGE = 'local'; // estes testes usam o disco; o Storage tem teste próprio (storage.test.js)
 process.env.PASTORAL_SCHEMA = `teste_${process.pid}`; // schema próprio no Postgres; é apagado no fim
 process.env.PASTORAL_UPLOADS = path.join(tmp, 'uploads');
 process.env.ADMIN_SENHA = 'Teste12345';

@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
+process.env.PASTORAL_STORAGE = 'local'; // estes testes usam o disco; o Storage tem teste próprio (storage.test.js)
 process.env.PASTORAL_SCHEMA = `bruta_${process.pid}`;
 process.env.PASTORAL_LIMITE_TENTATIVAS = '8';
 process.env.ADMIN_SENHA = 'Teste12345';
