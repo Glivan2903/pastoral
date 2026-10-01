@@ -6,7 +6,7 @@ const {
 } = require('../auth');
 const {
   ErroValidacao, normalizarNome, normalizarTelefone, normalizarData, normalizarEmail,
-  validarSenha, hashSenha, conferirSenha, sha256, novoToken,
+  validarSenha, hashSenha, conferirSenha, sha256, novoToken, hojeISO,
 } = require('../util');
 const { uploadFoto, caminho } = require('../upload');
 const { config } = require('../analise');
@@ -48,13 +48,16 @@ r.post('/cadastro', limitarLogin, async (req, res) => {
   const nome = normalizarNome(b.nome);
   const email = normalizarEmail(b.email);
   if (!email) throw new ErroValidacao('Informe o e-mail.');
+  const nascimento = normalizarData(b.data_nascimento, 'Data de nascimento');
+  if (!nascimento) throw new ErroValidacao('Informe a data de nascimento.');
+  if (nascimento > hojeISO() || nascimento < '1900-01-01') throw new ErroValidacao('Data de nascimento inválida.');
   validarSenha(b.senha);
   if (b.senha !== b.confirmacao) throw new ErroValidacao('A confirmação não confere com a senha.');
   if (!b.consentimento) throw new ErroValidacao('Aceite o uso dos seus dados (LGPD) para criar a conta.');
   if (await db.prepare('SELECT 1 FROM usuarios WHERE email = ?').get(email)) throw new ErroValidacao('Este e-mail já está cadastrado. Entre ou recupere a senha.', 409);
   const info = await db
     .prepare(`INSERT INTO usuarios (nome, telefone, data_nascimento, email, funcao, senha_hash, consentimento_lgpd_em) VALUES (?, ?, ?, ?, 'membro', ?, datetime('now'))`)
-    .run(nome, normalizarTelefone(b.telefone), normalizarData(b.data_nascimento, 'Data de nascimento'), email, hashSenha(b.senha));
+    .run(nome, normalizarTelefone(b.telefone), nascimento, email, hashSenha(b.senha));
   const u = await db.prepare('SELECT * FROM usuarios WHERE id = ?').get(info.lastInsertRowid);
   await criarSessao(res, u.id, novoToken());
   req.usuario = u;

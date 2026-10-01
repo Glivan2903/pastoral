@@ -182,7 +182,7 @@ test('cadastro público entra como Usuário e o administrador ajusta o cargo', a
   const coord = cookie;
   cookie = '';
   assert.strictEqual((await req('GET', '/api/cadastro/status', null, true)).json.aberto, true);
-  const ok = { nome: 'paula  NOVA dos santos', email: 'Paula@Teste.com', telefone: '(47) 98888-1234', senha: 'Paula12345', confirmacao: 'Paula12345', consentimento: true };
+  const ok = { nome: 'paula  NOVA dos santos', email: 'Paula@Teste.com', telefone: '(47) 98888-1234', data_nascimento: '1990-05-17', senha: 'Paula12345', confirmacao: 'Paula12345', consentimento: true };
   assert.strictEqual((await req('POST', '/api/cadastro', { ...ok, senha: 'curta', confirmacao: 'curta' }, true)).status, 400);
   assert.strictEqual((await req('POST', '/api/cadastro', { ...ok, confirmacao: 'Outra12345' }, true)).status, 400);
   assert.strictEqual((await req('POST', '/api/cadastro', { ...ok, consentimento: false }, true)).status, 400);
@@ -434,7 +434,7 @@ test('avisos: flag de lido/não lido por pessoa e notificações de novidades', 
   // quem se cadastra depois não recebe o que já passou
   await new Promise((r) => setTimeout(r, 1100));
   cookie = '';
-  await req('POST', '/api/cadastro', { nome: 'Recém Chegado', email: 'novo@teste.com', senha: 'Novo12345', confirmacao: 'Novo12345', consentimento: true }, true);
+  await req('POST', '/api/cadastro', { nome: 'Recém Chegado', email: 'novo@teste.com', data_nascimento: '1992-02-02', senha: 'Novo12345', confirmacao: 'Novo12345', consentimento: true }, true);
   assert.strictEqual((await req('GET', '/api/notificacoes')).json.itens.length, 0);
 
   // marcar todas e limpeza ao excluir

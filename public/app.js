@@ -34,6 +34,7 @@ const contrasteHex = (a, b) => {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const iniciais = (n) => String(n || '?').trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const fmtTel = (d) => (!d ? '' : d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : d);
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const fmtData = (iso) => { if (!iso) return ''; const [a, m, d] = iso.slice(0, 10).split('-'); return `${+d} de ${MESES[+m - 1].slice(0, 3)}. de ${a}`; };
@@ -361,6 +362,7 @@ function telaCadastro() {
     ${campoFlutuante('nome', 'Nome completo', 'text', 'autocomplete="name" required')}
     ${campoFlutuante('email', 'E-mail', 'email', 'autocomplete="username" required')}
     ${campoFlutuante('tel', 'Telefone (opcional)', 'text', 'inputmode="tel" autocomplete="tel"')}
+    ${campoFlutuante('nasc', 'Data de nascimento', 'date', `autocomplete="bday" min="1900-01-01" max="${hojeISO()}" required`)}
     <div class="fl com-olho"><input id="senha" type="password" placeholder=" " autocomplete="new-password" required><label for="senha">Senha</label>
       <button type="button" class="olho" id="olho" aria-label="Mostrar senha">${OLHO}</button></div>
     ${campoFlutuante('confirma', 'Confirmar senha', 'password', 'autocomplete="new-password" required')}
@@ -380,10 +382,11 @@ function telaCadastro() {
   document.getElementById('f').onsubmit = async (e) => {
     e.preventDefault();
     const v = (id) => document.getElementById(id).value;
+    if (!v('nasc')) return erroAuth('Informe a data de nascimento.');
     if (v('senha') !== v('confirma')) return erroAuth('A confirmação não confere com a senha.');
     const fim = enviando(e.target.querySelector('[type=submit]'), 'Criando conta…');
     try {
-      estado.usuario = await api('/api/cadastro', { method: 'POST', body: { nome: v('nome'), email: v('email'), telefone: v('tel'), senha: v('senha'), confirmacao: v('confirma'), consentimento: document.getElementById('lgpd').checked, site: v('site') } });
+      estado.usuario = await api('/api/cadastro', { method: 'POST', body: { nome: v('nome'), email: v('email'), telefone: v('tel'), data_nascimento: v('nasc'), senha: v('senha'), confirmacao: v('confirma'), consentimento: document.getElementById('lgpd').checked, site: v('site') } });
       toast('Conta criada. Seja bem-vinda(o)!');
       location.hash = '#/painel'; rotear();
     } catch (err) { fim(); erroAuth(err.message); }

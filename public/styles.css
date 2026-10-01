@@ -370,6 +370,7 @@ td.celula-guia .ponto-custom { position: absolute; top: 50%; margin-top: -4px; m
 .fl input { width: 100%; min-height: 54px; padding: 1.35rem .95rem .45rem; border-radius: 14px; border: 1.5px solid var(--borda); background: #fbfcff; }
 .fl label { position: absolute; left: .95rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; transition: all .18s ease; font-size: 1rem; font-weight: 400; }
 .fl input:focus + label, .fl input:not(:placeholder-shown) + label { top: .6rem; transform: none; font-size: .72rem; font-weight: 700; color: var(--azul-med); letter-spacing: .03em; text-transform: uppercase; }
+.fl input[type=date] + label { top: .6rem; transform: none; font-size: .72rem; font-weight: 700; color: var(--azul-med); letter-spacing: .03em; text-transform: uppercase; } /* campo de data nunca fica vazio: o rótulo fica sempre no alto */
 .fl input:focus { background: #fff; }
 .fl.com-olho input { padding-right: 3.2rem; }
 .olho { position: absolute; right: .35rem; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border: none; background: none; border-radius: 12px; color: var(--muted); display: grid; place-items: center; }

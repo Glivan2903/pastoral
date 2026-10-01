@@ -39,7 +39,7 @@ test('prepara contas: administrador, coordenação e usuário comum', async () =
   admin = (await login('admin@pastoral.local', 'Mestre2026')).cookie;
   coord = (await login('maria@pastoral.local', 'Teste12345')).cookie;
   assert.ok(admin && coord);
-  const c = await http('POST', '/api/cadastro', { body: { nome: 'Joana Teste', email: 'joana@teste.com', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true } });
+  const c = await http('POST', '/api/cadastro', { body: { nome: 'Joana Teste', email: 'joana@teste.com', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true, data_nascimento: '1990-01-15' } });
   assert.strictEqual(c.status, 201);
   usuario = c.headers.get('set-cookie').split(';')[0];
 });
@@ -98,7 +98,7 @@ test('coordenação não vira administrador nem mexe em permissões', async () =
 });
 
 test('mass assignment: cadastro público ignora cargo, superadmin e ativo enviados', async () => {
-  const r = await http('POST', '/api/cadastro', { body: { nome: 'Invasor Teste', email: 'invasor@teste.com', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true, funcao: 'coordenacao', superadmin: 1, cargo: 'administrador', ativo: 1 } });
+  const r = await http('POST', '/api/cadastro', { body: { nome: 'Invasor Teste', email: 'invasor@teste.com', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true, data_nascimento: '1990-01-15', funcao: 'coordenacao', superadmin: 1, cargo: 'administrador', ativo: 1 } });
   assert.strictEqual(r.status, 201);
   const u = await db.prepare('SELECT funcao, superadmin FROM usuarios WHERE email = ?').get('invasor@teste.com');
   assert.strictEqual(u.funcao, 'membro');
@@ -228,15 +228,19 @@ test('logout encerra a sessão no servidor (cookie roubado deixa de valer)', asy
 });
 
 test('política de senha e validação de entrada', async () => {
-  const base = { nome: 'Fraca Teste', email: 'fraca@teste.com', confirmacao: '', consentimento: true };
+  const base = { nome: 'Fraca Teste', email: 'fraca@teste.com', confirmacao: '', consentimento: true, data_nascimento: '1990-01-15' };
   for (const senha of ['curta1', 'somenteletras', '12345678', '']) {
     const r = await http('POST', '/api/cadastro', { body: { ...base, senha, confirmacao: senha } });
     assert.strictEqual(r.status, 400, `senha "${senha}"`);
   }
-  assert.strictEqual((await http('POST', '/api/cadastro', { body: { nome: 'A', email: 'nao-e-email', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true } })).status, 400);
+  assert.strictEqual((await http('POST', '/api/cadastro', { body: { nome: 'A', email: 'nao-e-email', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true, data_nascimento: '1990-01-15' } })).status, 400);
+  const semData = { nome: 'Sem Data', email: 'semdata@teste.com', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true };
+  assert.strictEqual((await http('POST', '/api/cadastro', { body: semData })).status, 400, 'data de nascimento é obrigatória');
+  assert.strictEqual((await http('POST', '/api/cadastro', { body: { ...semData, data_nascimento: '2999-01-01' } })).status, 400, 'data no futuro');
+  assert.strictEqual((await http('POST', '/api/cadastro', { body: { ...semData, data_nascimento: '31/02/2000' } })).status, 400, 'data impossível');
   assert.strictEqual((await http('POST', '/api/cadastro', { body: { nome: 'Sem LGPD', email: 'lgpd@teste.com', senha: 'Senha12345', confirmacao: 'Senha12345' } })).status, 400);
-  assert.strictEqual((await http('POST', '/api/cadastro', { body: { nome: 'Robô Teste', email: 'robo@teste.com', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true, site: 'http://spam' } })).status, 400, 'campo-isca');
-  const dup = await http('POST', '/api/cadastro', { body: { nome: 'Maria Dup', email: 'MARIA@pastoral.local', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true } });
+  assert.strictEqual((await http('POST', '/api/cadastro', { body: { nome: 'Robô Teste', email: 'robo@teste.com', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true, data_nascimento: '1990-01-15', site: 'http://spam' } })).status, 400, 'campo-isca');
+  const dup = await http('POST', '/api/cadastro', { body: { nome: 'Maria Dup', email: 'MARIA@pastoral.local', senha: 'Senha12345', confirmacao: 'Senha12345', consentimento: true, data_nascimento: '1990-01-15' } });
   assert.strictEqual(dup.status, 409, 'e-mail duplicado ignorando maiúsculas');
 });
 
